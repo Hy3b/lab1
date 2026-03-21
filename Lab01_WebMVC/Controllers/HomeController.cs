@@ -1,14 +1,30 @@
 using System.Diagnostics;
+using Lab01_WebMVC.Data;
 using Lab01_WebMVC.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Lab01_WebMVC.Controllers
 {
     public class HomeController : Controller
     {
-        public IActionResult Index()
+        private readonly ILogger<HomeController> _logger;
+        private readonly AppDbContext _context;
+
+        public HomeController(ILogger<HomeController> logger, AppDbContext context)
         {
-            return View();
+            _logger = logger;
+            _context = context;
+        }
+
+        public async Task<IActionResult> Index()
+        {
+            var products = await _context.Products
+                .Include(p => p.Category)
+                .Where(p => p.IsActive)
+                .Take(8)
+                .ToListAsync();
+            return View(products);
         }
 
         public IActionResult Privacy()

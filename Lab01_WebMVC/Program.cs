@@ -20,6 +20,15 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 // Add MVC
 builder.Services.AddControllersWithViews();
 
+// Add Session
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(30);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -35,8 +44,22 @@ app.UseRouting();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseSession();
+
+// Seed data
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<AppDbContext>();
+    await DbSeeder.SeedAsync(context);
+}
 
 app.MapStaticAssets();
+
+app.MapControllerRoute(
+    name: "areas",
+    pattern: "{area:exists}/{controller=Home}/{action=Index}/{id?}")
+    .WithStaticAssets();
 
 app.MapControllerRoute(
     name: "default",

@@ -1,0 +1,46 @@
+@model IEnumerable<Lab01_WebMVC.Models.Category>
+
+@{
+    ViewData["Title"] = "Danh mục sản phẩm";
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Quản lý Danh mục</h2>
+        <a asp-action="Create" class="btn btn-primary">Thêm danh mục mới</a>
+    </div>
+
+    <table class="table table-hover table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>Tên danh mục</th>
+                <th>Slug</th>
+                <th>Trạng thái</th>
+                <th>Hành động</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model)
+            {
+                <tr>
+                    <td>@item.Name</td>
+                    <td>@item.Slug</td>
+                    <td>
+                        @if (item.IsActive)
+                        {
+                            <span class="badge bg-success">Hoạt động</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-danger">Tạm khóa</span>
+                        }
+                    </td>
+                    <td>
+                        <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-warning">Sửa</a>
+                        <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-sm btn-danger">Xóa</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
