@@ -1,0 +1,15 @@
+@model Lab01_WebMVC.Models.ViewModels.PaginationVM
+
+@if (Model.TotalPages > 1)
+{
+<nav class="mt-4">
+  <ul class="pagination justify-content-center">
+    @for (int i = 1; i <= Model.TotalPages; i++)
+    {
+      <li class="page-item @(i == Model.Page ? "active" : "")">
+        <a class="page-link" href="?page=@i&categoryId=@ViewBag.CategoryId&search=@ViewBag.Search&sort=@ViewBag.Sort">@i</a>
+      </li>
+    }
+  </ul>
+</nav>
+}

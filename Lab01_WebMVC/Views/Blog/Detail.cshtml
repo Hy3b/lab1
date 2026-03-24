@@ -1,0 +1,111 @@
+@model Lab01_WebMVC.Models.BlogPost
+@{ ViewData["Title"] = Model.Title; }
+
+<div class="row justify-content-center">
+  <article class="col-lg-9">
+    <nav aria-label="breadcrumb" class="mb-4">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Trang chủ</a></li>
+        <li class="breadcrumb-item"><a href="/Blog">Blog</a></li>
+        <li class="breadcrumb-item"><a href="/Blog?categoryId=@Model.CategoryId">@Model.Category?.Name</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Chi tiết</li>
+      </ol>
+    </nav>
+    
+    <h1 class="fw-bold mb-3">@Model.Title</h1>
+    
+    <div class="d-flex align-items-center text-muted small mb-4 pb-3 border-bottom">
+        <img src="https://ui-avatars.com/api/?name=@Model.Author?.FullName&background=random" class="rounded-circle me-2" width="35" height="35" />
+        <div>
+            <span class="fw-bold text-dark">@Model.Author?.FullName</span>
+            <span class="mx-2">|</span>
+            <i class="bi bi-calendar3"></i> @Model.PublishedAt?.ToString("dd/MM/yyyy") 
+            <span class="mx-2">|</span>
+            <i class="bi bi-eye"></i> @Model.ViewCount lượt xem
+        </div>
+    </div>
+    
+    @if (!string.IsNullOrEmpty(Model.ImageUrl))
+    { 
+        <img src="@Model.ImageUrl" class="img-fluid rounded mb-5 shadow-sm w-100" style="max-height: 500px; object-fit: cover;" alt="@Model.Title" /> 
+    }
+
+    <div class="blog-content fs-5 lh-lg mb-5" style="letter-spacing: 0.3px;">
+        @Html.Raw(Model.Content)
+    </div>
+
+    @* Gắn sản phẩm *@
+    @if (Model.Product is not null)
+    {
+      <div class="card border-0 shadow-sm bg-light mt-5 p-4 rounded-4 position-relative overflow-hidden mb-5">
+        <div class="position-absolute top-0 end-0 bg-warning text-dark px-3 py-1 fw-bold" style="border-bottom-left-radius: 10px;">
+          ĐÁNG CHÚ Ý
+        </div>
+        <h5 class="fw-bold mb-4"><i class="bi bi-cart-check"></i> Sản phẩm được nhắc đến</h5>
+        
+        <div class="d-flex align-items-center gap-4">
+          <img src="@(Model.Product.ImageUrl??"https://via.placeholder.com/150")" style="width:120px;height:120px;object-fit:cover" class="rounded shadow-sm" />
+          <div class="flex-grow-1">
+            <h4 class="fw-bold">@Model.Product.Name</h4>
+            <p class="text-danger fw-bold fs-4 mb-2">
+              @((Model.Product.SalePrice ?? Model.Product.Price).ToString("N0")) đ
+            </p>
+            <a asp-controller="Shop" asp-action="Detail" asp-route-slug="@Model.Product.Slug" class="btn btn-primary px-4 shadow-sm">Xem chi tiết sản phẩm</a>
+          </div>
+        </div>
+      </div>
+    }
+
+    @* Bình luận *@
+    <section class="mt-5 pt-4 border-top">
+      <h4 class="fw-bold mb-4">Bình luận (@(Model.Comments?.Count ?? 0))</h4>
+      
+      @if (User.Identity!.IsAuthenticated)
+      {
+        <div class="card border-0 bg-light p-4 rounded shadow-sm mb-5">
+            <form asp-action="AddComment" asp-controller="Blog" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="postId" value="@Model.Id" />
+            <div class="d-flex gap-3">
+                <img src="https://ui-avatars.com/api/?name=@User.Identity.Name?.Split('@')[0]&background=random" class="rounded-circle" width="45" height="45" />
+                <div class="flex-grow-1">
+                    <textarea name="content" rows="3" class="form-control mb-3 border-0 shadow-sm" placeholder="Chia sẻ suy nghĩ của bạn..." required></textarea>
+                    <div class="text-end">
+                        <button class="btn btn-primary px-4 py-2 fw-bold">Gửi bình luận</button>
+                    </div>
+                </div>
+            </div>
+            </form>
+        </div>
+      }
+      else
+      {
+        <div class="alert alert-secondary text-center py-4 mb-5 border-0">
+            Hãy <a asp-controller="Account" asp-action="Login" class="fw-bold alert-link text-decoration-underline">Đăng nhập</a> để tham gia thảo luận.
+        </div>
+      }
+      
+      <div class="comments-list">
+          @if(Model.Comments != null && Model.Comments.Any()) {
+              @foreach (var c in Model.Comments.OrderByDescending(x=>x.CreatedAt))
+              {
+                <div class="d-flex gap-3 mb-4">
+                  <img src="https://ui-avatars.com/api/?name=@c.Author?.FullName&background=random" class="rounded-circle shadow-sm" width="50" height="50" />
+                  <div class="bg-light p-3 rounded-3 flex-grow-1 shadow-sm">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong class="text-dark">@c.Author?.FullName</strong>
+                        <small class="text-muted">@c.CreatedAt.ToString("dd/MM/yyyy HH:mm")</small>
+                    </div>
+                    <p class="mb-0 text-dark">@c.Content</p>
+                  </div>
+                </div>
+              }
+          }
+      </div>
+    </section>
+  </article>
+</div>
+
+<style>
+    .blog-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 1.5rem 0; box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075); }
+</style>

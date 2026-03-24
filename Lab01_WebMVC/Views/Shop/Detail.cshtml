@@ -1,0 +1,175 @@
+@model Lab01_WebMVC.Models.Product
+@{ ViewData["Title"] = Model.Name; }
+
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">Trang chủ</a></li>
+    <li class="breadcrumb-item"><a href="/Shop">Sản phẩm</a></li>
+    <li class="breadcrumb-item"><a href="/Shop?categoryId=@Model.CategoryId">@Model.Category?.Name</a></li>
+    <li class="breadcrumb-item active" aria-current="page">@Model.Name</li>
+  </ol>
+</nav>
+
+<div class="row mb-5">
+    <div class="col-md-5 mb-4">
+        <div class="card border-0 shadow-sm overflow-hidden text-center bg-light" style="height:400px">
+            <img src="@(Model.ImageUrl ?? "https://via.placeholder.com/600x600?text=No+Image")" 
+                 class="img-fluid" style="object-fit: contain; max-height:100%; width:100%" alt="@Model.Name" />
+        </div>
+    </div>
+    
+    <div class="col-md-7 ps-md-4">
+        <h2 class="fw-bold mb-2">@Model.Name</h2>
+        
+        <div class="d-flex align-items-center mb-3">
+            <span class="badge bg-primary me-2">@Model.Category?.Name</span>
+            @if(Model.Stock > 0) {
+                <span class="text-success"><i class="bi bi-check-circle-fill"></i> Còn hàng (@Model.Stock)</span>
+            } else {
+                <span class="text-danger"><i class="bi bi-x-circle-fill"></i> Hết hàng</span>
+            }
+        </div>
+        
+        <div class="mb-4 p-3 bg-light rounded text-center text-md-start">
+            <span class="fs-2 fw-bold text-danger">@((Model.SalePrice ?? Model.Price).ToString("N0")) đ</span>
+            @if (Model.SalePrice.HasValue && Model.SalePrice < Model.Price)
+            {
+                <del class="text-muted ms-3 fs-5">@Model.Price.ToString("N0") đ</del>
+                <span class="badge bg-danger ms-2" style="font-size:0.9em">
+                    -@Math.Round((1 - Model.SalePrice.Value / Model.Price) * 100)%
+                </span>
+            }
+        </div>
+        
+        <div class="mb-4">
+            <h5>Mô tả ngắn gọn</h5>
+            <p class="text-muted">@(string.IsNullOrEmpty(Model.Description) ? "Đang cập nhật mô tả..." : Model.Description)</p>
+        </div>
+        
+        <hr />
+        
+        <div class="d-flex align-items-center gap-3 mt-4">
+            <div class="input-group" style="width: 140px;">
+                <button class="btn btn-outline-secondary" type="button" onclick="changeQty(-1)">-</button>
+                <input type="number" id="detailQty" class="form-control text-center text-dark" value="1" min="1" max="@(Model.Stock > 0 ? Model.Stock : 1)" @(Model.Stock <= 0 ? "disabled" : "") />
+                <button class="btn btn-outline-secondary" type="button" onclick="changeQty(1)">+</button>
+            </div>
+            
+            @if(Model.Stock > 0) {
+                <button class="btn btn-warning btn-lg flex-grow-1 fw-bold text-dark px-4" onclick="addToCartDetail(@Model.Id, this)">
+                    <i class="bi bi-cart-plus fs-5"></i> THÊM VÀO GIỎ HÀNG
+                </button>
+            } else {
+                 <button class="btn btn-secondary btn-lg flex-grow-1 fw-bold px-4" disabled>
+                    TẠM HẾT HÀNG
+                </button>
+            }
+        </div>
+    </div>
+</div>
+
+@if (Model.BlogPosts != null && Model.BlogPosts.Any())
+{
+    <div class="row mt-5">
+        <div class="col-12">
+            <h4 class="border-bottom pb-2 mb-4">Bài viết giới thiệu đánh giá</h4>
+            <div class="list-group">
+                @foreach(var blog in Model.BlogPosts)
+                {
+                    <a href="/Blog/Detail?slug=@blog.Slug" class="list-group-item list-group-item-action d-flex gap-3 py-3">
+                        <img src="@(blog.ImageUrl ?? "https://via.placeholder.com/100")" alt="img" style="width:100px; height:80px; object-fit:cover" class="rounded">
+                        <div class="d-flex gap-2 w-100 justify-content-between">
+                            <div>
+                                <h6 class="mb-0 fw-bold">@blog.Title</h6>
+                                <p class="mb-0 opacity-75 small mt-1">@blog.Summary</p>
+                            </div>
+                        </div>
+                    </a>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@if (ViewBag.Related != null && ((List<Lab01_WebMVC.Models.Product>)ViewBag.Related).Any())
+{
+    <div class="mt-5">
+        <h4 class="border-bottom pb-2 mb-4">Sản phẩm cùng danh mục</h4>
+        <div class="row row-cols-2 row-cols-md-4 g-3">
+            @foreach(var p in (List<Lab01_WebMVC.Models.Product>)ViewBag.Related)
+            {
+                <div class="col">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div style="height:150px; overflow:hidden;" class="bg-light">
+                            <img src="@(p.ImageUrl ?? "https://via.placeholder.com/300x200")" class="card-img-top" style="object-fit:cover; height:100%" />
+                        </div>
+                        <div class="card-body p-2 d-flex flex-column">
+                            <a href="/Shop/Detail?slug=@p.Slug" class="text-decoration-none text-dark">
+                                <h6 class="card-title text-truncate small" title="@p.Name">@p.Name</h6>
+                            </a>
+                            <p class="text-danger fw-bold mt-auto mb-0 small">@((p.SalePrice ?? p.Price).ToString("N0")) đ</p>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<script>
+function changeQty(delta) {
+    const input = document.getElementById('detailQty');
+    let val = parseInt(input.value) + delta;
+    const max = parseInt(input.getAttribute('max'));
+    if(val < 1) val = 1;
+    if(val > max) val = max;
+    input.value = val;
+}
+
+async function addToCartDetail(productId, btn) {
+  const qty = document.getElementById('detailQty').value;
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> ĐANG XỬ LÝ...';
+  
+  try {
+      const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+      const res = await fetch('/Cart/AddItem', {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'RequestVerificationToken': token 
+        },
+        body: JSON.stringify({ productId: productId, qty: parseInt(qty) })
+      });
+      
+      const data = await res.json();
+      
+      if(data.ok) {
+          document.getElementById('cart-count').textContent = data.count;
+          btn.innerHTML = '✓ ĐÃ THÊM VÀO GIỎ';
+          btn.classList.add('btn-success');
+          btn.classList.remove('btn-warning');
+          
+          setTimeout(() => {
+              btn.innerHTML = originalHtml;
+              btn.disabled = false;
+              btn.classList.remove('btn-success');
+              btn.classList.add('btn-warning');
+          }, 2000);
+      } else {
+          alert("Lỗi: " + data.message);
+          btn.innerHTML = originalHtml;
+          btn.disabled = false;
+      }
+  } catch(e) {
+      alert("Đã xảy ra lỗi kết nối!");
+      btn.innerHTML = originalHtml;
+      btn.disabled = false;
+  }
+}
+</script>
+}

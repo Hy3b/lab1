@@ -1,0 +1,59 @@
+@model Lab01_WebMVC.Models.ViewModels.CheckoutVM
+@{ ViewData["Title"] = "Thanh toán giao hàng"; }
+
+<h2 class="mb-4 fw-bold">📦 Đặt hàng & Thanh toán</h2>
+
+<div class="row">
+    <div class="col-md-7 mb-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white fw-bold fs-5 py-3">Thông tin giao hàng</div>
+            <div class="card-body p-4">
+                <form asp-action="Checkout" method="post">
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+                    
+                    <div class="mb-3">
+                        <label asp-for="FullName" class="form-label fw-semibold">Họ và Tên</label>
+                        <input asp-for="FullName" class="form-control" placeholder="Nhập họ tên người nhận" />
+                        <span asp-validation-for="FullName" class="text-danger small"></span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label asp-for="Phone" class="form-label fw-semibold">Số điện thoại</label>
+                        <input asp-for="Phone" class="form-control" placeholder="Nhập số điện thoại liên hệ" />
+                        <span asp-validation-for="Phone" class="text-danger small"></span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label asp-for="Address" class="form-label fw-semibold">Địa chỉ giao hàng</label>
+                        <textarea asp-for="Address" class="form-control" rows="2" placeholder="Ghi rõ số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"></textarea>
+                        <span asp-validation-for="Address" class="text-danger small"></span>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label asp-for="Note" class="form-label fw-semibold">Ghi chú (Tùy chọn)</label>
+                        <textarea asp-for="Note" class="form-control" rows="2" placeholder="Lưu ý lúc giao hàng (ví dụ: giao trong giờ hành chính)"></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success w-100 py-3 fw-bold fs-5">XÁC NHẬN ĐẶT HÀNG</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-5">
+        <div class="card shadow-sm border-0 bg-light">
+            <div class="card-header bg-light fw-bold fs-5 py-3 border-bottom-0">Đơn hàng của bạn (@ViewBag.CartCount sản phẩm)</div>
+            <div class="card-body">
+                @* This would ideally show the actual cart items summary passed via another partial, but checking ViewBag.CartCount is enough for basic UI *@
+                <div class="d-flex justify-content-between mb-3 border-bottom pb-3 text-muted">
+                    <span>Thanh toán khi nhận hàng (COD)</span>
+                    <span>✓</span>
+                </div>
+                <div class="alert alert-info border-0 mt-3 pt-3">
+                    <i class="bi bi-shield-check"></i> Thanh toán an toàn và bảo mật với khả năng hoàn phí 100% nếu có lỗi từ nhà sản xuất.
+                </div>
+                <a asp-controller="Cart" asp-action="Index" class="btn btn-outline-secondary w-100 mt-2">Quay lại giỏ hàng</a>
+            </div>
+        </div>
+    </div>
+</div>

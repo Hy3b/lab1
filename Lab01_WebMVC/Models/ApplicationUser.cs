@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity;
 
 namespace Lab01_WebMVC.Models
 {
@@ -11,8 +11,8 @@ namespace Lab01_WebMVC.Models
         public bool IsActive { get; set; } = true;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        //public ICollection<Order> Orders { get; set; } = new List<Order>();
-        //public ICollection<BlogPost> BlogPosts { get; set; } = new List<BlogPost>();
+        public ICollection<Order> Orders { get; set; } = new List<Order>();
+        public ICollection<BlogPost> BlogPosts { get; set; } = new List<BlogPost>();
 
     }
 }

@@ -1,0 +1,58 @@
+DANH SÁCH CÁC YÊU CẦU CÒN LẠI PHẢI LÀM (SHOPAPP)
+
+---
+PHẦN 1: CẬP NHẬT DATABASE (ENTITY FRAMEWORK)
+1. Restore các package .NET 8 (`dotnet restore`).
+2. Build project để đảm bảo không có lỗi code Models/DbContext (`dotnet build`).
+3. Chạy lệnh tạo Migration mới: `dotnet ef migrations add AddShopAppModels`
+4. Cập nhật Database: `dotnet ef database update`
+
+---
+PHẦN 2: SERVICES & HELPERS
+1. Tạo file `Models/CartItem.cs` dùng cho giỏ hàng.
+2. Tạo file `Helpers/SessionExtensions.cs` (hỗ trợ lưu Object vào Session).
+3. Tạo file `Helpers/SlugHelper.cs` (tạo URL thân thiện từ chuỗi tiếng Việt).
+4. Tạo thư mục `Services` và định nghĩa các Intefaces & Classes:
+   - `ICartService` và `CartService.cs`
+   - Bổ sung `IProductService`, `IBlogService`, `IOrderService` nếu cần thiết (theo khai báo `Program.cs` hoặc dùng DbContext trực tiếp).
+
+---
+PHẦN 3: VIEWMODELS
+1. Xây dựng các ViewModels phục vụ Frontend:
+   - `Models/ViewModels/LoginVM.cs`
+   - `Models/ViewModels/RegisterVM.cs`
+   - `Models/ViewModels/CheckoutVM.cs` (cho Order)
+
+---
+PHẦN 4: CONTROLLERS (PUBLIC)
+1. `BaseController.cs`: Kế thừa Controller, luôn load số lượng giỏ hàng (`ViewBag.CartCount`) vào OnActionExecuting.
+2. `AccountController.cs`: Login (cookie auth), Register, Logout.
+3. `ShopController.cs`: Index (Filter, Pagination, Sort), Detail.
+4. `CartController.cs`: Thêm, Sửa, Xóa giỏ hàng bằng AJAX/Session.
+5. `OrderController.cs`: View Checkout, Xử lý giao dịch đặt hàng (Transaction, giảm Stock, lưu Order).
+6. `BlogController.cs`: Danh sách bài viết, Xem bài viết, chức năng Bình luận (yêu cầu đăng nhập).
+
+---
+PHẦN 5: GIAO DIỆN (VIEWS PUBLIC)
+1. Cập nhật `Views/Shared/_Layout.cshtml` (Navbar, Role Admin/Customer, Giỏ hàng).
+2. Tạo Partial Views: `Views/Shared/_Pagination.cshtml`.
+3. Tạo Views cho Shop: `Views/Shop/Index.cshtml`, `Views/Shop/Detail.cshtml`.
+4. Tạo Views cho Cart và Checkout đặt hàng.
+5. Tạo Views cho Blog: `Views/Blog/Index.cshtml`, `Views/Blog/Detail.cshtml`.
+6. Tạo Views cho Account (Login, Register).
+
+---
+PHẦN 6: ADMIN AREA
+1. Thiết lập Area Admin trong thư mục `Areas/Admin`.
+2. Tạo `DashboardController.cs`: Thống kê tổng quan đơn hàng, sản phẩm, doanh thu.
+3. Tạo `ProductController.cs`: (CRUD) Sản phẩm, kết hợp tính năng Upload Ảnh, sử dụng SlugHelper.
+4. Tạo `BlogController.cs`: (CRUD) Bài viết blog, có liên kết với Product nếu cần.
+5. Tạo `OrderController.cs`: Quản lý danh sách đơn hàng, Cập nhật trạng thái (Pending -> Delivered...).
+6. Xây dựng toàn bộ Views tương ứng cho Admin.
+
+---
+PHẦN 7: KIỂM TRA & HOÀN THIỆN
+1. Chạy chạy dự án và kiểm tra Log lỗi.
+2. Test phân quyền: thử dùng account thường (Customer) truy cập URL `/Admin/` xem có bị chặn (Redirect to Login/AccessDenied) hay không.
+3. Test thanh toán: chọn mua nghiệm thu xem giỏ hàng có xóa và Database có ghi nhận Order thành công, Stock có bị trừ.
+4. Test View Lịch sử xem: check tính năng Session History Cache.

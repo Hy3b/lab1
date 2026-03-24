@@ -1,0 +1,154 @@
+@model List<Lab01_WebMVC.Models.Product>
+@{ ViewData["Title"] = "Sản phẩm"; }
+
+<div class="row">
+  <aside class="col-md-3">
+    <div class="card p-3 mb-3 shadow-sm border-0">
+      <h6 class="fw-bold mb-3 text-uppercase">Danh mục</h6>
+      <div class="nav flex-column nav-pills">
+          <a href="/Shop" class="nav-link @(ViewBag.CategoryId == null ? "active" : "text-dark")">Tất cả</a>
+          @foreach (var c in ViewBag.Categories as List<Lab01_WebMVC.Models.Category> ?? new())
+          {
+            <a href="/Shop?categoryId=@c.Id" class="nav-link @(ViewBag.CategoryId == c.Id ? "active" : "text-dark")">@c.Name</a>
+          }
+      </div>
+    </div>
+    
+    <div class="card p-3 shadow-sm border-0">
+      <h6 class="fw-bold mb-3 text-uppercase">Lọc giá</h6>
+      <form method="get" action="/Shop">
+        <input type="hidden" name="categoryId" value="@ViewBag.CategoryId" />
+        <input type="hidden" name="search" value="@ViewBag.Search" />
+        
+        <div class="mb-2">
+          <label class="form-label small">Từ (đ)</label>
+          <input name="minPrice" type="number" class="form-control form-control-sm" placeholder="Ví dụ: 1000000" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label small">Đến (đ)</label>
+          <input name="maxPrice" type="number" class="form-control form-control-sm" placeholder="Ví dụ: 5000000" />
+        </div>
+        <button class="btn btn-sm btn-outline-primary w-100">Áp dụng lọc</button>
+      </form>
+    </div>
+  </aside>
+
+  <div class="col-md-9">
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+      <p class="text-muted m-0"><i class="bi bi-box"></i> Hiển thị @Model.Count sản phẩm</p>
+      
+      <form method="get" action="/Shop" class="d-flex gap-2">
+        <input type="hidden" name="categoryId" value="@ViewBag.CategoryId" />
+        <input type="text" name="search" class="form-control form-control-sm" placeholder="Tìm kiếm..." value="@ViewBag.Search" />
+        <select name="sort" onchange="this.form.submit()" class="form-select form-select-sm w-auto">
+          <option value="newest" selected="@(ViewBag.Sort == "newest")">Mới nhất</option>
+          <option value="price_asc" selected="@(ViewBag.Sort == "price_asc")">Giá tăng dần</option>
+          <option value="price_desc" selected="@(ViewBag.Sort == "price_desc")">Giá giảm dần</option>
+        </select>
+        <button type="submit" class="btn btn-sm btn-light">Tìm</button>
+      </form>
+    </div>
+
+    @if (!Model.Any()) {
+        <div class="alert alert-info text-center py-5">
+            Không tìm thấy sản phẩm nào!
+        </div>
+    }
+
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-4">
+      @foreach (var p in Model)
+      {
+        <div class="col">
+          <div class="card h-100 shadow-sm border-0 product-card transition-hover">
+            <div style="height:200px; overflow:hidden;" class="bg-light d-flex align-items-center justify-content-center">
+                <img src="@(p.ImageUrl ?? "/images/no-image.jpg")" class="card-img-top p-img" style="object-fit:cover; max-height: 100%; transition: transform 0.3s;" alt="@p.Name" onerror="this.src='https://via.placeholder.com/300x200?text=No+Image'"/>
+            </div>
+            
+            <div class="card-body d-flex flex-column">
+              <h6 class="card-title text-truncate" title="@p.Name">@p.Name</h6>
+              
+              <div class="mt-auto pt-2">
+                  <p class="text-danger fw-bold mb-1 fs-5">
+                    @((p.SalePrice ?? p.Price).ToString("N0")) đ
+                  </p>
+                  @if (p.SalePrice.HasValue && p.SalePrice < p.Price)
+                  {
+                    <del class="text-muted small">@p.Price.ToString("N0") đ</del>
+                  } else {
+                    <div style="height:21px"></div>
+                  }
+                  
+                  <div class="d-flex gap-2 mt-3">
+                    <a asp-action="Detail" asp-route-slug="@p.Slug" class="btn btn-outline-primary btn-sm flex-grow-1">Xem</a>
+                    @if(p.Stock > 0) {
+                        <button class="btn btn-warning btn-sm" onclick="addToCart(@p.Id, this)" title="Thêm vào giỏ">🛒</button>
+                    } else {
+                        <button class="btn btn-secondary btn-sm" disabled>Hết</button>
+                    }
+                  </div>
+              </div>
+            </div>
+            
+            @if(p.IsFeatured) {
+                <span class="badge bg-danger position-absolute top-0 start-0 m-2">HOT</span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+    
+    @await Html.PartialAsync("_Pagination", new Lab01_WebMVC.Models.ViewModels.PaginationVM { Page = ViewBag.Page, TotalPages = ViewBag.TotalPages })
+  </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@section Scripts {
+<style>
+    .product-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,.1)!important; }
+    .product-card:hover .p-img { transform: scale(1.05); }
+</style>
+<script>
+async function addToCart(productId, btn) {
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+  
+  try {
+      const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+      const res = await fetch('/Cart/AddItem', {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'RequestVerificationToken': token 
+        },
+        body: JSON.stringify({ productId: productId, qty: 1 })
+      });
+      
+      const data = await res.json();
+      
+      if(data.ok) {
+          document.getElementById('cart-count').textContent = data.count;
+          btn.textContent = '✓';
+          btn.classList.add('btn-success');
+          btn.classList.remove('btn-warning');
+          
+          setTimeout(() => {
+              btn.innerHTML = originalHtml;
+              btn.disabled = false;
+              btn.classList.remove('btn-success');
+              btn.classList.add('btn-warning');
+          }, 1500);
+      } else {
+          alert("Lỗi: " + data.message);
+          btn.innerHTML = originalHtml;
+          btn.disabled = false;
+      }
+  } catch(e) {
+      alert("Đã xảy ra lỗi hệ thống.");
+      btn.innerHTML = originalHtml;
+      btn.disabled = false;
+  }
+}
+</script>
+}

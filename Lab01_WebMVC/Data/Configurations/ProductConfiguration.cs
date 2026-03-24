@@ -1,11 +1,10 @@
-﻿using Lab01_WebMVC.Models;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Lab01_WebMVC.Models;
 
 namespace Lab01_WebMVC.Data.Configurations
 {
-    public class ProductConfiguration: IEntityTypeConfiguration<Product>
+    public class ProductConfiguration : IEntityTypeConfiguration<Product>
     {
         public void Configure(EntityTypeBuilder<Product> b)
         {
@@ -20,6 +19,5 @@ namespace Lab01_WebMVC.Data.Configurations
             b.HasOne(p => p.Category).WithMany(c => c.Products)
                 .HasForeignKey(p => p.CategoryId).OnDelete(DeleteBehavior.Restrict);
         }
-
     }
 }

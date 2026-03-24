@@ -1,0 +1,1282 @@
+Dưới đây là toàn bộ nội dung của file tài liệu để bạn có thể dễ dàng sao chép và lưu thành file .txt:
+BT1 – ASP.NET Core MVC: Hệ thống Bán hàng + Blog
+ BÀI TẬP THỰC HÀNH 1 ASP.NET CORE MVC + RAZOR + JAVASCRIPT
+ 🛒 HỆ THỐNG BÁN HÀNG + BLOG SẢN PHẨM
+Hình thức: Thực hành máy cá nhân
+Thời gian: 9~10 tiết
+Công nghệ chính: ASP.NET Core 8 MVC, EF Core + SQLite, Identity, Session, IMemoryCache
+Frontend: Razor Views, Bootstrap 5, JavaScript/Fetch API
+Authentication: ASP.NET Identity + Cookie Authentication
+Tổng điểm: 100 điểm
+Chức năng cần xây dựng
+Đăng ký / Đăng nhập: Identity + Cookie (Register, Login, Logout, Lockout)
+Danh mục & Sản phẩm: EF Core, Razor, Paging (Trang công khai xem sản phẩm)
+Giỏ hàng: Session (Thêm/xóa/sửa số lượng, không cần đăng nhập)
+Đặt hàng: EF Core Transaction (Tạo Order từ Cart, trừ tồn kho)
+Blog sản phẩm: Razor, Rich content (Bài viết giới thiệu, gắn với sản phẩm)
+Upload hình ảnh: IFormFile (Ảnh sản phẩm, ảnh blog)
+Admin Panel: [Authorize(Roles)] (CRUD product, blog, xem order)
+Cache & Session: IMemoryCache (Cache menu, session giỏ hàng, lịch sử xem)
+--------------------------------------------------------------------------------
+PHẦN 1 – KHỞI TẠO DỰ ÁN & CẤU TRÚC (Tạo project MVC, cài package, thiết kế thư mục)
+BƯỚC 1: Tạo project và cài packages
+# Tạo project MVC
+dotnet new mvc -n ShopApp --framework net8.0
+cd ShopApp
+
+# EF Core + SQLite
+dotnet add package Microsoft.EntityFrameworkCore.Sqlite
+dotnet add package Microsoft.EntityFrameworkCore.Design
+dotnet add package Microsoft.EntityFrameworkCore.Tools
+
+# Identity
+dotnet add package Microsoft.AspNetCore.Identity.EntityFrameworkCore
+
+# AutoMapper (tùy chọn – giúp map ViewModel)
+dotnet add package AutoMapper.Extensions.Microsoft.DependencyInjection
+
+# EF Tool (cài 1 lần dùng mãi)
+dotnet tool install --global dotnet-ef
+BƯỚC 2: Cấu trúc thư mục
+Models/: Entity classes: Product, Category, Order, BlogPost...
+Models/ViewModels/: ViewModel cho Razor: LoginVM, ProductCreateVM...
+Data/AppDbContext.cs: EF Core DbContext kế thừa IdentityDbContext
+Data/Configurations/: IEntityTypeConfiguration<T> cho từng entity
+Data/SeedData.cs: Dữ liệu mẫu: role, admin, category, sản phẩm
+Services/: Interface + Implementation: CartService, CacheService...
+Helpers/: SessionExtensions, SlugHelper, ImageHelper
+Areas/Admin/: Controllers + Views riêng cho Admin
+Views/Shared/: _Layout.cshtml, _Pagination.cshtml, _ProductCard.cshtml
+wwwroot/uploads/: Lưu ảnh upload (products/, blogs/)
+appsettings.json: Connection string, cấu hình
+BƯỚC 3: appsettings.json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Data Source=shopapp.db"
+  },
+  "AppSettings": {
+    "SiteName": "ShopApp",
+    "MaxUploadMB": 5
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.EntityFrameworkCore.Database.Command": "Warning"
+    }
+  }
+}
+--------------------------------------------------------------------------------
+PHẦN 2 – ENTITIES & EF CORE (Định nghĩa model, cấu hình Fluent API, tạo Migration)
+BƯỚC 1: BaseEntity – Lớp cha
+// Models/BaseEntity.cs
+public abstract class BaseEntity {
+    public int             Id        { get; set; }
+    public DateTimeOffset  CreatedAt { get; set; }
+    public DateTimeOffset? UpdatedAt { get; set; }
+    public bool            IsDeleted { get; set; } = false;
+}
+BƯỚC 2: ApplicationUser – Kế thừa IdentityUser
+// Models/ApplicationUser.cs
+public class ApplicationUser : IdentityUser {
+    public string  FullName   { get; set; } = string.Empty;
+    public string? AvatarUrl  { get; set; }
+    public string? Address    { get; set; }
+    public string? Phone      { get; set; }
+    public bool    IsActive   { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<Order>    Orders    { get; set; } = new List<Order>();
+    public ICollection<BlogPost> BlogPosts { get; set; } = new List<BlogPost>();
+}
+BƯỚC 3: Category & Product
+// Models/Category.cs
+public class Category : BaseEntity {
+    public string  Name        { get; set; } = string.Empty;
+    public string  Slug        { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? ImageUrl    { get; set; }
+    public int     SortOrder   { get; set; } = 0;
+    public bool    IsActive    { get; set; } = true;
+    public ICollection<Product>  Products  { get; set; } = new List<Product>();
+}
+
+// Models/Product.cs
+public class Product : BaseEntity {
+    public string  Name        { get; set; } = string.Empty;
+    public string  Slug        { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public decimal Price       { get; set; }
+    public decimal? SalePrice  { get; set; }
+    public int     Stock       { get; set; } = 0;
+    public string? ImageUrl    { get; set; }
+    public bool    IsActive    { get; set; } = true;
+    public bool    IsFeatured  { get; set; } = false;
+    public int     CategoryId  { get; set; }
+    public Category  Category  { get; set; } = null!;
+}
+BƯỚC 4: Order & OrderItem
+// Models/Order.cs
+public class Order : BaseEntity {
+    public string      Code        { get; set; } = string.Empty;
+    public decimal     TotalAmount { get; set; }
+    public OrderStatus Status      { get; set; } = OrderStatus.Pending;
+    public string      FullName    { get; set; } = string.Empty;
+    public string      Phone       { get; set; } = string.Empty;
+    public string      Address     { get; set; } = string.Empty;
+    public string?     Note        { get; set; }
+    public string      UserId      { get; set; } = string.Empty;
+    public ApplicationUser User    { get; set; } = null!;
+    public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
+}
+public enum OrderStatus { Pending, Confirmed, Shipping, Delivered, Cancelled }
+
+// Models/OrderItem.cs
+public class OrderItem {
+    public int     Id        { get; set; }
+    public int     OrderId   { get; set; }
+    public int     ProductId { get; set; }
+    public int     Qty       { get; set; }
+    public decimal UnitPrice { get; set; }
+    public Order   Order     { get; set; } = null!;
+    public Product Product   { get; set; } = null!;
+}
+BƯỚC 5: BlogPost – Bài viết giới thiệu sản phẩm
+// Models/BlogPost.cs
+public class BlogPost : BaseEntity {
+    public string       Title      { get; set; } = string.Empty;
+    public string       Slug       { get; set; } = string.Empty;
+    public string       Summary    { get; set; } = string.Empty;
+    public string       Content    { get; set; } = string.Empty;
+    public string?      ImageUrl   { get; set; }
+    public int          ViewCount  { get; set; } = 0;
+    public PostStatus   Status     { get; set; } = PostStatus.Draft;
+    public DateTime?    PublishedAt{ get; set; }
+    public int          CategoryId { get; set; }  // danh mục blog
+    public int?         ProductId  { get; set; }  // gắn với sản phẩm (nếu có)
+    public string       AuthorId   { get; set; } = string.Empty;
+    public Category         Category { get; set; } = null!;
+    public Product?         Product  { get; set; }
+    public ApplicationUser  Author   { get; set; } = null!;
+    public ICollection<BlogComment> Comments { get; set; } = new List<BlogComment>();
+}
+public enum PostStatus { Draft, Published, Archived }
+
+// Models/BlogComment.cs
+public class BlogComment : BaseEntity {
+    public string Content   { get; set; } = string.Empty;
+    public int    PostId    { get; set; }
+    public string AuthorId  { get; set; } = string.Empty;
+    public BlogPost        Post   { get; set; } = null!;
+    public ApplicationUser Author { get; set; } = null!;
+}
+BƯỚC 6: AppDbContext
+// Data/AppDbContext.cs
+public class AppDbContext : IdentityDbContext<ApplicationUser> {
+    public AppDbContext(DbContextOptions<AppDbContext> o) : base(o) {}
+
+    public DbSet<Category>    Categories   => Set<Category>();
+    public DbSet<Product>     Products     => Set<Product>();
+    //public DbSet<Order>       Orders       => Set<Order>();
+    //public DbSet<OrderItem>   OrderItems   => Set<OrderItem>();
+    //public DbSet<BlogPost>    BlogPosts    => Set<BlogPost>();
+    //public DbSet<BlogComment> BlogComments => Set<BlogComment>();
+
+    protected override void OnModelCreating(ModelBuilder b)
+    {
+        base.OnModelCreating(b);
+        b.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+    }
+
+    public override async Task<int> SaveChangesAsync(CancellationToken ct=default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var e in ChangeTracker.Entries<BaseEntity>())
+        {
+            if (e.State==EntityState.Added)    e.Entity.CreatedAt=now;
+            if (e.State==EntityState.Modified) e.Entity.UpdatedAt=now;
+        }
+        return await base.SaveChangesAsync(ct);
+    }
+}
+BƯỚC 7: Fluent API Configurations
+// Data/Configurations/ProductConfiguration.cs
+public class ProductConfiguration : IEntityTypeConfiguration<Product> {
+    public void Configure(EntityTypeBuilder<Product> b)
+    {
+        b.ToTable("Products");
+        b.Property(p=>p.Name).IsRequired().HasMaxLength(250);
+        b.Property(p=>p.Slug).IsRequired().HasMaxLength(270);
+        b.Property(p=>p.Price).HasColumnType("decimal(18,2)");
+        b.Property(p=>p.SalePrice).HasColumnType("decimal(18,2)");
+        b.HasIndex(p=>p.Slug).IsUnique();
+        b.HasIndex(p=>new{p.CategoryId,p.IsActive});
+        b.HasQueryFilter(p=>!p.IsDeleted);
+        b.HasOne(p=>p.Category).WithMany(c=>c.Products)
+            .HasForeignKey(p=>p.CategoryId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+// Data/Configurations/BlogPostConfiguration.cs
+public class BlogPostConfiguration : IEntityTypeConfiguration<BlogPost> {
+    public void Configure(EntityTypeBuilder<BlogPost> b)
+    {
+        b.ToTable("BlogPosts");
+        b.Property(p=>p.Title).IsRequired().HasMaxLength(300);
+        b.Property(p=>p.Slug).IsRequired().HasMaxLength(320);
+        b.Property(p=>p.Summary).HasMaxLength(600);
+        b.Property(p=>p.Status).HasConversion<string>();
+        b.HasIndex(p=>p.Slug).IsUnique();
+        b.HasQueryFilter(p=>!p.IsDeleted);
+        b.HasOne(p=>p.Category).WithMany(c=>c.BlogPosts)
+            .HasForeignKey(p=>p.CategoryId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne(p=>p.Product).WithMany(p=>p.BlogPosts)
+            .HasForeignKey(p=>p.ProductId).OnDelete(DeleteBehavior.SetNull);
+        b.HasOne(p=>p.Author).WithMany(u=>u.BlogPosts)
+            .HasForeignKey(p=>p.AuthorId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+BƯỚC 8: Migration & Database
+dotnet ef migrations add InitialCreate
+dotnet ef database update
+# Kiểm tra: file shopapp.db xuất hiện trong thư mục project
+--------------------------------------------------------------------------------
+PHẦN 3 – IDENTITY, COOKIE AUTH & PROGRAM.CS (Đăng ký, đăng nhập bằng cookie, phân quyền role)
+BƯỚC 1: Đăng ký services trong Program.cs
+// Program.cs
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<AppDbContext>(o =>
+    o.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services
+    .AddIdentity<ApplicationUser, IdentityRole>(opt =>
+    {
+        opt.Password.RequiredLength         = 6;
+        opt.Password.RequireDigit           = true;
+        opt.Password.RequireUppercase       = false;
+        opt.Password.RequireNonAlphanumeric = false;
+        opt.User.RequireUniqueEmail         = true;
+        opt.Lockout.MaxFailedAccessAttempts = 5;
+        opt.Lockout.DefaultLockoutTimeSpan  = TimeSpan.FromMinutes(10);
+    })
+    .AddEntityFrameworkStores<AppDbContext>()
+    .AddDefaultTokenProviders();
+
+// Cookie config
+builder.Services.ConfigureApplicationCookie(o => {
+    o.LoginPath          = "/Account/Login";
+    o.AccessDeniedPath   = "/Account/AccessDenied";
+    o.ExpireTimeSpan     = TimeSpan.FromDays(7);
+    o.SlidingExpiration  = true;
+});
+
+// Session + Cache
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(o => {
+    o.IdleTimeout        = TimeSpan.FromMinutes(60);
+    o.Cookie.HttpOnly    = true;
+    o.Cookie.IsEssential = true;
+});
+builder.Services.AddMemoryCache();
+
+// Services
+builder.Services.AddScoped<ICartService, CartService>();
+builder.Services.AddScoped<IProductService, ProductService>();
+builder.Services.AddScoped<IBlogService, BlogService>();
+builder.Services.AddScoped<IOrderService, OrderService>();
+
+builder.Services.AddControllersWithViews();
+
+var app = builder.Build();
+app.UseStaticFiles();
+app.UseRouting();
+app.UseSession();
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapControllerRoute("areas",
+    "{area:exists}/{controller=Dashboard}/{action=Index}/{id?}");
+app.MapControllerRoute("default",
+    "{controller=Home}/{action=Index}/{id?}");
+
+// Seed
+using (var scope = app.Services.CreateScope()) {
+    await scope.ServiceProvider.GetRequiredService<AppDbContext>()
+        .Database.MigrateAsync();
+    await SeedData.InitAsync(scope.ServiceProvider);
+}
+app.Run();
+BƯỚC 2: SeedData – Tạo Role, Admin, Categories, Products mẫu
+// Data/SeedData.cs
+public static class SeedData {
+    public static async Task InitAsync(IServiceProvider svc)
+    {
+        var ctx  = svc.GetRequiredService<AppDbContext>();
+        var rm   = svc.GetRequiredService<RoleManager<IdentityRole>>();
+        var um   = svc.GetRequiredService<UserManager<ApplicationUser>>();
+
+        // Roles
+        foreach (var r in new[]{"Admin","Customer"})
+            if (!await rm.RoleExistsAsync(r)) await rm.CreateAsync(new IdentityRole(r));
+
+        // Admin
+        if (await um.FindByEmailAsync("admin@shop.vn") is null)
+        {
+            var admin = new ApplicationUser { UserName="admin@shop.vn",
+                Email="admin@shop.vn", FullName="Administrator",
+                EmailConfirmed=true };
+            await um.CreateAsync(admin, "Admin@123");
+            await um.AddToRoleAsync(admin, "Admin");
+        }
+
+        // Categories
+        if (!await ctx.Categories.AnyAsync())
+        {
+            ctx.Categories.AddRange(
+                new Category{Name="Điện thoại",Slug="dien-thoai",IsActive=true,SortOrder=1},
+                new Category{Name="Laptop",    Slug="laptop",    IsActive=true,SortOrder=2},
+                new Category{Name="Phụ kiện",  Slug="phu-kien",  IsActive=true,SortOrder=3}
+            );
+            await ctx.SaveChangesAsync();
+        }
+
+        // Products mẫu
+        if (!await ctx.Products.AnyAsync())
+        {
+            var cat = await ctx.Categories.FirstAsync();
+            ctx.Products.AddRange(
+                new Product{Name="iPhone 15",Slug="iphone-15",Price=22990000,
+                    Stock=50,IsActive=true,IsFeatured=true,CategoryId=cat.Id,
+                    Description="Smartphone cao cấp từ Apple"},
+                new Product{Name="Samsung S24",Slug="samsung-s24",Price=19990000,
+                    Stock=30,IsActive=true,CategoryId=cat.Id,
+                    Description="Flagship mới nhất từ Samsung"}
+            );
+            await ctx.SaveChangesAsync();
+        }
+    }
+}
+BƯỚC 3: AccountController – Đăng ký & Đăng nhập
+// ViewModels/LoginVM.cs
+public class LoginVM {
+    [Required, EmailAddress] public string Email    { get; set; } = "";
+    [Required]               public string Password { get; set; } = "";
+    public bool RememberMe { get; set; }
+    public string? ReturnUrl { get; set; }
+}
+
+// ViewModels/RegisterVM.cs
+public class RegisterVM {
+    [Required, MaxLength(100)] public string FullName  { get; set; } = "";
+    [Required, EmailAddress]   public string Email     { get; set; } = "";
+    [Required, MinLength(6)]   public string Password  { get; set; } = "";
+    [Compare("Password")]      public string Confirm   { get; set; } = "";
+}
+
+// Controllers/AccountController.cs
+[Route("[controller]/[action]")]
+public class AccountController(UserManager<ApplicationUser> um,
+    SignInManager<ApplicationUser> sm) : Controller {
+    [HttpGet] public IActionResult Login(string? returnUrl)
+        => View(new LoginVM { ReturnUrl = returnUrl });
+
+    [HttpPost]
+    public async Task<IActionResult> Login(LoginVM vm)
+    {
+        if (!ModelState.IsValid) return View(vm);
+        var r = await sm.PasswordSignInAsync(vm.Email, vm.Password,
+            vm.RememberMe, lockoutOnFailure: true);
+        if (r.IsLockedOut)
+        { ModelState.AddModelError("","Tài khoản bị khóa tạm thời"); return View(vm); }
+        if (!r.Succeeded)
+        { ModelState.AddModelError("","Email hoặc mật khẩu không đúng"); return View(vm); }
+        return LocalRedirect(vm.ReturnUrl ?? "/");
+    }
+
+    [HttpGet] public IActionResult Register() => View(new RegisterVM());
+
+    [HttpPost]
+    public async Task<IActionResult> Register(RegisterVM vm)
+    {
+        if (!ModelState.IsValid) return View(vm);
+        var user = new ApplicationUser { UserName=vm.Email, Email=vm.Email,
+            FullName=vm.FullName };
+        var r = await um.CreateAsync(user, vm.Password);
+        if (!r.Succeeded)
+        { r.Errors.ToList().ForEach(e=>ModelState.AddModelError("",e.Description));
+          return View(vm); }
+        await um.AddToRoleAsync(user, "Customer");
+        await sm.SignInAsync(user, false);
+        return RedirectToAction("Index","Home");
+    }
+
+    [HttpPost, Authorize]
+    public async Task<IActionResult> Logout()
+    { await sm.SignOutAsync(); return RedirectToAction("Index","Home"); }
+}
+✅ Mẹo: SignInManager.PasswordSignInAsync tự xử lý lockout – không cần code thêm logic đếm lần sai.
+--------------------------------------------------------------------------------
+PHẦN 4 – LAYOUT & TRANG CÔNG KHAI (Navbar, trang chủ, danh sách sản phẩm, chi tiết sản phẩm)
+BƯỚC 1: _Layout.cshtml – Navbar với giỏ hàng
+@* Views/Shared/_Layout.cshtml *@
+<!DOCTYPE html><html lang="vi"><head>
+  <meta charset="utf-8" />
+  <title>@ViewData["Title"] – ShopApp</title>
+  <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="~/css/site.css" />
+</head><body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+  <div class="container">
+    <a class="navbar-brand fw-bold" asp-controller="Home" asp-action="Index">
+      🛒 ShopApp
+    </a>
+    <div class="navbar-collapse">
+      <ul class="navbar-nav me-auto">
+        <li class="nav-item">
+          <a class="nav-link" asp-controller="Shop" asp-action="Index">Sản phẩm</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" asp-controller="Blog" asp-action="Index">Blog</a>
+        </li>
+      </ul>
+      <ul class="navbar-nav align-items-center">
+        @* Giỏ hàng *@
+        <li class="nav-item me-2">
+          <a class="btn btn-outline-warning btn-sm"
+             asp-controller="Cart" asp-action="Index">
+            🛒 <span id="cart-count">@ViewBag.CartCount</span>
+          </a>
+        </li>
+        @if (User.Identity!.IsAuthenticated)
+        {
+          @if (User.IsInRole("Admin"))
+          {
+            <li><a class="nav-link" asp-area="Admin"
+asp-controller="Dashboard" asp-action="Index">⚙ Admin</a></li>
+          }
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
+              👤 @User.Identity.Name
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item"
+                 asp-controller="Account" asp-action="Profile">Tài khoản</a></li>
+              <li><hr class="dropdown-divider" /></li>
+              <li>
+                <form asp-controller="Account" asp-action="Logout" method="post">
+                  <button class="dropdown-item text-danger">Đăng xuất</button>
+                </form>
+              </li>
+            </ul>
+          </li>
+        }
+        else
+        {
+          <li><a class="nav-link" asp-controller="Account" asp-action="Login">Đăng nhập</a></li>
+          <li><a class="btn btn-primary btn-sm ms-2"
+             asp-controller="Account" asp-action="Register">Đăng ký</a></li>
+        }
+      </ul>
+    </div>
+  </div>
+</nav>
+<main class="container py-4">
+  @RenderBody()
+</main>
+<footer class="bg-dark text-light py-3 mt-5 text-center">
+  <small>© 2025 ShopApp – Hệ thống bán hàng trực tuyến</small>
+</footer>
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+@RenderSection("Scripts",required:false)
+</body></html>
+BƯỚC 2: BaseController – Load CartCount vào ViewBag
+// Controllers/BaseController.cs
+public abstract class BaseController(ICartService cartService) : Controller {
+    public override void OnActionExecuting(ActionExecutingContext ctx)
+    {
+        // Luôn cập nhật số lượng giỏ hàng trong ViewBag
+        ViewBag.CartCount = cartService.GetCount(HttpContext.Session);
+        base.OnActionExecuting(ctx);
+    }
+}
+// Các controller public kế thừa BaseController
+// Controller Admin kế thừa Controller thường
+BƯỚC 3: ShopController – Danh sách & Chi tiết sản phẩm
+// Controllers/ShopController.cs
+public class ShopController(AppDbContext ctx, IMemoryCache cache) : BaseController {
+    public async Task<IActionResult> Index(
+        int? categoryId, string? search, decimal? minPrice, decimal? maxPrice,
+        string sort="newest", int page=1)
+    {
+        const int ps = 12;
+        var query = ctx.Products.Where(p=>p.IsActive).AsQueryable();
+
+        if (categoryId.HasValue) query = query.Where(p=>p.CategoryId==categoryId);
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(p=>p.Name.Contains(search)||
+                                    p.Description!.Contains(search));
+        if (minPrice.HasValue) query = query.Where(p=>p.Price>=minPrice);
+        if (maxPrice.HasValue) query = query.Where(p=>p.Price<=maxPrice);
+
+        query = sort switch {
+            "price_asc"  => query.OrderBy(p=>p.Price),
+            "price_desc" => query.OrderByDescending(p=>p.Price),
+            _            => query.OrderByDescending(p=>p.CreatedAt),
+        };
+
+        var total = await query.CountAsync();
+        var items = await query.Include(p=>p.Category)
+            .Skip((page-1)*ps).Take(ps).AsNoTracking().ToListAsync();
+
+        // Cache categories cho sidebar
+        if (!cache.TryGetValue("cats", out List<Category>? cats))
+        {
+            cats = await ctx.Categories.Where(c=>c.IsActive)
+                .OrderBy(c=>c.SortOrder).AsNoTracking().ToListAsync();
+            cache.Set("cats", cats, TimeSpan.FromMinutes(30));
+        }
+
+        ViewBag.Categories  = cats;
+        ViewBag.CategoryId  = categoryId;
+        ViewBag.Search      = search;
+        ViewBag.Sort        = sort;
+        ViewBag.Page        = page;
+        ViewBag.TotalPages  = (int)Math.Ceiling(total/(double)ps);
+        return View(items);
+    }
+
+    public async Task<IActionResult> Detail(string slug)
+    {
+        var product = await ctx.Products
+            .Include(p=>p.Category)
+            .Include(p=>p.BlogPosts.Where(b=>b.Status==PostStatus.Published))
+            .FirstOrDefaultAsync(p=>p.Slug==slug && p.IsActive);
+        if (product is null) return NotFound();
+
+        // Lưu lịch sử xem
+        var viewed = HttpContext.Session.GetObject<List<int>>("Viewed") ?? new();
+        if (!viewed.Contains(product.Id)) viewed.Insert(0,product.Id);
+        if (viewed.Count>10) viewed.RemoveAt(10);
+        HttpContext.Session.SetObject("Viewed", viewed);
+
+        // Sản phẩm liên quan
+        var related = await ctx.Products
+            .Where(p=>p.CategoryId==product.CategoryId && p.Id!=product.Id && p.IsActive)
+            .Take(4).AsNoTracking().ToListAsync();
+        ViewBag.Related = related;
+        return View(product);
+    }
+}
+BƯỚC 4: Views/Shop/Index.cshtml – Grid sản phẩm có filter
+@model List<Product>
+@{ ViewData["Title"] = "Sản phẩm"; }
+<div class="row">
+  <!-- Sidebar filter -->
+  <aside class="col-md-3">
+    <div class="card p-3 mb-3">
+      <h6 class="fw-bold">Danh mục</h6>
+      <a href="/Shop" class="d-block @(ViewBag.CategoryId==null?"fw-bold":"")">Tất cả</a>
+      @foreach (var c in ViewBag.Categories as List<Category> ?? new())
+      {
+        <a href="/Shop?categoryId=@c.Id"
+           class="d-block @(ViewBag.CategoryId==c.Id?"fw-bold":"")">@c.Name</a>
+      }
+    </div>
+    <div class="card p-3">
+      <h6 class="fw-bold">Lọc giá</h6>
+      <form method="get" action="/Shop">
+        <input type="hidden" name="categoryId" value="@ViewBag.CategoryId" />
+        <div class="mb-2">
+          <label class="form-label small">Từ (đ)</label>
+          <input name="minPrice" type="number" class="form-control form-control-sm" />
+        </div>
+        <div class="mb-2">
+          <label class="form-label small">Đến (đ)</label>
+          <input name="maxPrice" type="number" class="form-control form-control-sm" />
+        </div>
+        <button class="btn btn-sm btn-primary w-100">Lọc</button>
+      </form>
+    </div>
+  </aside>
+
+  <!-- Product grid -->
+  <div class="col-md-9">
+    <div class="d-flex justify-content-between mb-3">
+      <p class="text-muted">Hiển thị @Model.Count sản phẩm</p>
+      <select onchange="location.href='/Shop?sort='+this.value" class="form-select w-auto">
+        <option value="newest" @(ViewBag.Sort=="newest"?"selected":"")>Mới nhất</option>
+        <option value="price_asc" @(ViewBag.Sort=="price_asc"?"selected":"")>Giá tăng dần</option>
+        <option value="price_desc" @(ViewBag.Sort=="price_desc"?"selected":"")>Giá giảm dần</option>
+      </select>
+    </div>
+    <div class="row row-cols-2 row-cols-md-3 g-3">
+      @foreach (var p in Model)
+      {
+        <div class="col">
+          <div class="card h-100 shadow-sm">
+            <img src="@(p.ImageUrl ?? "/images/no-image.jpg")"
+                 class="card-img-top" style="height:200px;object-fit:cover" />
+            <div class="card-body d-flex flex-column">
+              <h6 class="card-title">@p.Name</h6>
+              <p class="text-danger fw-bold mt-auto">
+                @(p.SalePrice.HasValue ? p.SalePrice!.Value : p.Price).ToString("N0") đ
+              </p>
+              @if (p.SalePrice.HasValue)
+              {
+                <del class="text-muted small">@p.Price.ToString("N0") đ</del>
+              }
+              <div class="d-flex gap-2 mt-2">
+                <a asp-action="Detail" asp-route-slug="@p.Slug"
+                   class="btn btn-outline-primary btn-sm flex-grow-1">Chi tiết</a>
+                <button class="btn btn-warning btn-sm"
+                        onclick="addToCart(@p.Id, this)">🛒</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+    @* Pagination *@
+    @await Html.PartialAsync("_Pagination",
+      new PaginationVM { Page=ViewBag.Page, TotalPages=ViewBag.TotalPages })
+  </div>
+</div>
+@section Scripts {
+<script>
+async function addToCart(productId, btn) {
+  btn.disabled = true;
+  btn.textContent = '...';
+  const res = await fetch('/Cart/AddItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json',
+               'RequestVerificationToken': document.querySelector('[name=__RequestVerificationToken]')?.value ?? '' },
+    body: JSON.stringify({ productId, qty: 1 })
+  });
+  const data = await res.json();
+  document.getElementById('cart-count').textContent = data.count;
+  btn.disabled = false;
+  btn.textContent = '✓';
+  setTimeout(() => btn.textContent = '🛒', 1500);
+}
+</script>
+}
+--------------------------------------------------------------------------------
+PHẦN 5 – GIỎ HÀNG (SESSION) & ĐẶT HÀNG (CartService, CartController, OrderController)
+BƯỚC 1: CartItem model & SessionExtensions
+// Models/CartItem.cs (không phải Entity – chỉ lưu trong session)
+public class CartItem {
+    public int     ProductId   { get; set; }
+    public string  ProductName { get; set; } = "";
+    public string? ImageUrl    { get; set; }
+    public decimal UnitPrice   { get; set; }
+    public int     Qty         { get; set; }
+    public decimal Subtotal    => UnitPrice * Qty;
+}
+
+// Helpers/SessionExtensions.cs
+public static class SessionExtensions {
+    public static void SetObject<T>(this ISession s, string key, T obj)
+        => s.SetString(key, JsonSerializer.Serialize(obj));
+    public static T? GetObject<T>(this ISession s, string key)
+    { var j=s.GetString(key); return j is null?default:JsonSerializer.Deserialize<T>(j); }
+}
+BƯỚC 2: ICartService & CartService
+// Services/ICartService.cs
+public interface ICartService {
+    List<CartItem> GetCart(ISession session);
+    void AddItem(ISession session, CartItem item);
+    void UpdateQty(ISession session, int productId, int qty);
+    void RemoveItem(ISession session, int productId);
+    void Clear(ISession session);
+    int GetCount(ISession session);
+    decimal GetTotal(ISession session);
+}
+
+// Services/CartService.cs
+public class CartService : ICartService {
+    private const string KEY = "cart";
+
+    public List<CartItem> GetCart(ISession s)
+        => s.GetObject<List<CartItem>>(KEY) ?? new();
+
+    public void AddItem(ISession s, CartItem newItem)
+    {
+        var cart = GetCart(s);
+        var existing = cart.FirstOrDefault(i=>i.ProductId==newItem.ProductId);
+        if (existing is not null) existing.Qty += newItem.Qty;
+        else cart.Add(newItem);
+        s.SetObject(KEY, cart);
+    }
+
+    public void UpdateQty(ISession s, int productId, int qty)
+    {
+        var cart = GetCart(s);
+        var item = cart.FirstOrDefault(i=>i.ProductId==productId);
+        if (item is not null) { item.Qty=qty; if(item.Qty<=0) cart.Remove(item); }
+        s.SetObject(KEY, cart);
+    }
+
+    public void RemoveItem(ISession s, int productId)
+    { var c=GetCart(s); c.RemoveAll(i=>i.ProductId==productId); s.SetObject(KEY,c); }
+
+    public void Clear(ISession s) => s.Remove(KEY);
+    public int GetCount(ISession s) => GetCart(s).Sum(i=>i.Qty);
+    public decimal GetTotal(ISession s) => GetCart(s).Sum(i=>i.Subtotal);
+}
+BƯỚC 3: CartController – Thêm/Xóa/Xem giỏ hàng
+// Controllers/CartController.cs
+public class CartController(ICartService cart, AppDbContext ctx) : BaseController {
+    public IActionResult Index()
+        => View(cart.GetCart(HttpContext.Session));
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddItem([FromBody] AddToCartDto dto)
+    {
+        var product = await ctx.Products.FindAsync(dto.ProductId);
+        if (product is null || !product.IsActive)
+            return Json(new{ok=false, message="Sản phẩm không tồn tại"});
+        if (product.Stock < dto.Qty)
+            return Json(new{ok=false, message="Không đủ hàng"});
+
+        cart.AddItem(HttpContext.Session, new CartItem {
+            ProductId=product.Id, ProductName=product.Name,
+            ImageUrl=product.ImageUrl, UnitPrice=product.SalePrice??product.Price,
+            Qty=dto.Qty
+        });
+        return Json(new{ok=true, count=cart.GetCount(HttpContext.Session)});
+    }
+
+    [HttpPost]
+    public IActionResult Update(int productId, int qty)
+    {
+        cart.UpdateQty(HttpContext.Session, productId, qty);
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    public IActionResult Remove(int productId)
+    {
+        cart.RemoveItem(HttpContext.Session, productId);
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    public IActionResult Clear()
+    { cart.Clear(HttpContext.Session); return RedirectToAction(nameof(Index)); }
+}
+public record AddToCartDto(int ProductId, int Qty=1);
+BƯỚC 4: OrderController – Thanh toán & Đặt hàng
+// Controllers/OrderController.cs
+[Authorize]
+public class OrderController(
+    AppDbContext ctx, ICartService cart,
+    UserManager<ApplicationUser> um) : BaseController {
+    [HttpGet]
+    public async Task<IActionResult> Checkout()
+    {
+        var items = cart.GetCart(HttpContext.Session);
+        if (!items.Any()) return RedirectToAction("Index","Cart");
+        var user = await um.GetUserAsync(User);
+        return View(new CheckoutVM {
+            FullName = user!.FullName, Phone=user.PhoneNumber??"" });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Checkout(CheckoutVM vm)
+    {
+        if (!ModelState.IsValid) return View(vm);
+        var items = cart.GetCart(HttpContext.Session);
+        if (!items.Any()) return RedirectToAction("Index","Cart");
+
+        await using var tx = await ctx.Database.BeginTransactionAsync();
+        try
+        {
+            var order = new Order {
+                Code        = "ORD"+DateTime.Now.ToString("yyyyMMddHHmmss"),
+                FullName    = vm.FullName, Phone=vm.Phone, Address=vm.Address,
+                Note        = vm.Note,
+                TotalAmount = items.Sum(i=>i.Subtotal),
+                UserId      = um.GetUserId(User)!,
+            };
+
+            foreach (var item in items)
+            {
+                var product = await ctx.Products.FindAsync(item.ProductId);
+                if (product is null || product.Stock < item.Qty)
+                    throw new Exception($"{item.ProductName} không đủ hàng");
+                product.Stock -= item.Qty;
+                order.Items.Add(new OrderItem {
+                    ProductId=item.ProductId, Qty=item.Qty, UnitPrice=item.UnitPrice
+                });
+            }
+
+            ctx.Orders.Add(order);
+            await ctx.SaveChangesAsync();
+            await tx.CommitAsync();
+            cart.Clear(HttpContext.Session);
+            TempData["OrderCode"] = order.Code;
+            return RedirectToAction(nameof(Success));
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync();
+            ModelState.AddModelError("",ex.Message);
+            return View(vm);
+        }
+    }
+
+    public IActionResult Success()
+        => View(model: TempData["OrderCode"]?.ToString());
+
+    public async Task<IActionResult> History()
+    {
+        var userId = um.GetUserId(User);
+        var orders = await ctx.Orders
+            .Include(o=>o.Items).ThenInclude(i=>i.Product)
+            .Where(o=>o.UserId==userId)
+            .OrderByDescending(o=>o.CreatedAt)
+            .AsNoTracking().ToListAsync();
+        return View(orders);
+    }
+}
+--------------------------------------------------------------------------------
+PHẦN 6 – BLOG SẢN PHẨM (BlogController công khai + Admin blog management)
+BƯỚC 1: BlogController – Trang công khai
+// Controllers/BlogController.cs
+public class BlogController(AppDbContext ctx) : BaseController {
+    public async Task<IActionResult> Index(
+        int? categoryId, string? search, int page=1)
+    {
+        const int ps = 9;
+        var query = ctx.BlogPosts
+            .Where(b=>b.Status==PostStatus.Published)
+            .AsQueryable();
+
+        if (categoryId.HasValue) query=query.Where(b=>b.CategoryId==categoryId);
+        if (!string.IsNullOrWhiteSpace(search))
+            query=query.Where(b=>b.Title.Contains(search)||
+                                  b.Summary.Contains(search));
+
+        var total = await query.CountAsync();
+        var posts  = await query
+            .Include(b=>b.Category).Include(b=>b.Author)
+            .Include(b=>b.Product)
+            .OrderByDescending(b=>b.PublishedAt)
+            .Skip((page-1)*ps).Take(ps)
+            .AsNoTracking().ToListAsync();
+
+        ViewBag.Page       = page;
+        ViewBag.TotalPages = (int)Math.Ceiling(total/(double)ps);
+        ViewBag.Search     = search;
+        ViewBag.CategoryId = categoryId;
+        ViewBag.Categories = await ctx.Categories.Where(c=>c.IsActive)
+            .AsNoTracking().ToListAsync();
+        return View(posts);
+    }
+
+    public async Task<IActionResult> Detail(string slug)
+    {
+        var post = await ctx.BlogPosts
+            .Include(b=>b.Category).Include(b=>b.Author)
+            .Include(b=>b.Product)
+            .Include(b=>b.Comments).ThenInclude(c=>c.Author)
+            .FirstOrDefaultAsync(b=>b.Slug==slug &&
+                                    b.Status==PostStatus.Published);
+        if (post is null) return NotFound();
+        post.ViewCount++;
+        await ctx.SaveChangesAsync();
+
+        // Bài liên quan cùng category
+        var related = await ctx.BlogPosts
+            .Where(b=>b.CategoryId==post.CategoryId && b.Id!=post.Id
+                    && b.Status==PostStatus.Published)
+            .OrderByDescending(b=>b.PublishedAt)
+            .Take(3).AsNoTracking().ToListAsync();
+        ViewBag.Related = related;
+        return View(post);
+    }
+
+    [HttpPost, Authorize]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddComment(
+        int postId, string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return RedirectToAction(nameof(Detail), new{slug=""});
+        var post = await ctx.BlogPosts.FindAsync(postId);
+        if (post is null) return NotFound();
+        ctx.BlogComments.Add(new BlogComment {
+            PostId   = postId,
+            Content  = content.Trim(),
+            AuthorId = User.FindFirstValue(ClaimTypes.NameIdentifier)!
+        });
+        await ctx.SaveChangesAsync();
+        return RedirectToAction(nameof(Detail),new{slug=post.Slug});
+    }
+}
+BƯỚC 2: Views/Blog/Detail.cshtml – Chi tiết bài viết kèm sản phẩm
+@model BlogPost
+@{ ViewData["Title"]=Model.Title; }
+<div class="row">
+  <article class="col-lg-8">
+    <h1 class="h2">@Model.Title</h1>
+    <div class="text-muted small mb-3">
+      ✍ @Model.Author.FullName &nbsp;|&nbsp;
+      📅 @Model.PublishedAt?.ToString("dd/MM/yyyy") &nbsp;|&nbsp;
+      👁 @Model.ViewCount lượt xem
+    </div>
+    @if (Model.ImageUrl is not null)
+    { <img src="@Model.ImageUrl" class="img-fluid rounded mb-4" /> }
+
+    <div class="blog-content">@Html.Raw(Model.Content)</div>
+
+    @* Gắn sản phẩm liên quan *@
+    @if (Model.Product is not null)
+    {
+      <div class="card border-warning mt-4">
+        <div class="card-header bg-warning text-dark fw-bold">
+          🛒 Sản phẩm trong bài viết
+        </div>
+        <div class="card-body d-flex align-items-center gap-3">
+          <img src="@(Model.Product.ImageUrl??"/images/no-image.jpg")"
+               style="width:80px;height:80px;object-fit:cover" class="rounded" />
+          <div>
+            <h6>@Model.Product.Name</h6>
+            <p class="text-danger mb-1">
+              @((Model.Product.SalePrice??Model.Product.Price).ToString("N0")) đ
+            </p>
+            <a asp-controller="Shop" asp-action="Detail"
+               asp-route-slug="@Model.Product.Slug"
+               class="btn btn-warning btn-sm">Xem sản phẩm</a>
+          </div>
+        </div>
+      </div>
+    }
+
+    @* Bình luận *@
+    <section class="mt-5">
+      <h4>Bình luận (@Model.Comments.Count)</h4>
+      @foreach (var c in Model.Comments.OrderByDescending(x=>x.CreatedAt))
+      {
+        <div class="d-flex gap-2 mb-3">
+          <div class="fw-bold text-nowrap">@c.Author.FullName</div>
+          <div class="text-muted small">@c.Content</div>
+        </div>
+      }
+      @if (User.Identity!.IsAuthenticated)
+      {
+        <form asp-action="AddComment" asp-controller="Blog" method="post">
+          @Html.AntiForgeryToken()
+          <input type="hidden" name="postId" value="@Model.Id" />
+          <textarea name="content" rows="3" class="form-control mb-2"
+                    placeholder="Nhận xét của bạn..."></textarea>
+          <button class="btn btn-primary btn-sm">Gửi bình luận</button>
+        </form>
+      }
+      else
+      {
+        <p><a asp-controller="Account" asp-action="Login">Đăng nhập</a>
+        để để lại bình luận.</p>
+      }
+    </section>
+  </article>
+
+  <!-- Sidebar bài liên quan -->
+  <aside class="col-lg-4">
+    <h5 class="mb-3">Bài viết liên quan</h5>
+    @foreach (var r in ViewBag.Related as List<BlogPost> ?? new())
+    {
+      <div class="card mb-3">
+        @if (r.ImageUrl is not null)
+        { <img src="@r.ImageUrl" class="card-img-top" style="height:140px;object-fit:cover"/>}
+        <div class="card-body py-2">
+          <a asp-action="Detail" asp-route-slug="@r.Slug" class="text-decoration-none">
+            <h6 class="card-title mb-1">@r.Title</h6>
+          </a>
+          <small class="text-muted">@r.PublishedAt?.ToString("dd/MM/yyyy")</small>
+        </div>
+      </div>
+    }
+  </aside>
+</div>
+--------------------------------------------------------------------------------
+PHẦN 7 – ADMIN PANEL (Area Admin, CRUD sản phẩm + blog, quản lý đơn hàng)
+BƯỚC 1: Cấu trúc Areas/Admin
+ ✅ Mẹo: Tạo thư mục: Areas/Admin/Controllers/, Areas/Admin/Views/Dashboard/, /Product/, /Blog/, /Order/
+// Areas/Admin/Controllers/DashboardController.cs
+[Area("Admin")]
+[Authorize(Roles="Admin")]
+public class DashboardController(AppDbContext ctx) : Controller {
+    public async Task<IActionResult> Index()
+    {
+        ViewBag.TotalProducts = await ctx.Products.CountAsync();
+        ViewBag.TotalOrders   = await ctx.Orders.CountAsync();
+        ViewBag.TotalRevenue  = await ctx.Orders
+            .Where(o=>o.Status==OrderStatus.Delivered)
+            .SumAsync(o=>o.TotalAmount);
+        ViewBag.TotalPosts    = await ctx.BlogPosts.CountAsync();
+        var recentOrders = await ctx.Orders
+            .Include(o=>o.User).Include(o=>o.Items)
+            .OrderByDescending(o=>o.CreatedAt).Take(5)
+            .AsNoTracking().ToListAsync();
+        return View(recentOrders);
+    }
+}
+BƯỚC 2: Admin ProductController – CRUD + Upload ảnh
+// Areas/Admin/Controllers/ProductController.cs
+[Area("Admin"), Authorize(Roles="Admin")]
+public class ProductController(
+    AppDbContext ctx, IWebHostEnvironment env) : Controller {
+    public async Task<IActionResult> Index(string? search, int page=1)
+    {
+        const int ps = 20;
+        var q = ctx.Products.Include(p=>p.Category).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(search))
+            q = q.Where(p=>p.Name.Contains(search));
+        var total = await q.CountAsync();
+        var list  = await q.OrderByDescending(p=>p.CreatedAt)
+            .Skip((page-1)*ps).Take(ps).IgnoreQueryFilters() // thấy cả deleted
+            .AsNoTracking().ToListAsync();
+        ViewBag.Page=page; ViewBag.TotalPages=(int)Math.Ceiling(total/(double)ps);
+        ViewBag.Search=search;
+        return View(list);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Categories = await ctx.Categories.ToListAsync();
+        return View(new ProductVM());
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(
+        ProductVM vm, IFormFile? imageFile)
+    {
+        if (!ModelState.IsValid)
+        { ViewBag.Categories=await ctx.Categories.ToListAsync(); return View(vm); }
+
+        var product = new Product {
+            Name=vm.Name, Description=vm.Description,
+            Slug=SlugHelper.Generate(vm.Name),
+            Price=vm.Price, SalePrice=vm.SalePrice,
+            Stock=vm.Stock, CategoryId=vm.CategoryId,
+            IsActive=vm.IsActive, IsFeatured=vm.IsFeatured
+        };
+        if (imageFile is { Length: > 0 })
+            product.ImageUrl = await SaveImageAsync(imageFile, "products");
+
+        ctx.Products.Add(product);
+        await ctx.SaveChangesAsync();
+        TempData["Ok"] = "Thêm sản phẩm thành công!";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Edit(int id)
+    {
+        var p = await ctx.Products.FindAsync(id);
+        if (p is null) return NotFound();
+        ViewBag.Categories = await ctx.Categories.ToListAsync();
+        return View(new ProductVM { Name=p.Name, Description=p.Description,
+            Price=p.Price, SalePrice=p.SalePrice, Stock=p.Stock,
+            CategoryId=p.CategoryId, IsActive=p.IsActive, IsFeatured=p.IsFeatured });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(
+        int id, ProductVM vm, IFormFile? imageFile)
+    {
+        var product = await ctx.Products.FindAsync(id);
+        if (product is null) return NotFound();
+        if (!ModelState.IsValid)
+        { ViewBag.Categories=await ctx.Categories.ToListAsync(); return View(vm); }
+
+        product.Name=vm.Name; product.Description=vm.Description;
+        product.Slug=SlugHelper.Generate(vm.Name);
+        product.Price=vm.Price; product.SalePrice=vm.SalePrice;
+        product.Stock=vm.Stock; product.CategoryId=vm.CategoryId;
+        product.IsActive=vm.IsActive; product.IsFeatured=vm.IsFeatured;
+
+        if (imageFile is { Length: > 0 })
+            product.ImageUrl = await SaveImageAsync(imageFile, "products");
+
+        await ctx.SaveChangesAsync();
+        TempData["Ok"] = "Cập nhật thành công!";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var p = await ctx.Products.FindAsync(id);
+        if (p is null) return Json(new{ok=false});
+        p.IsDeleted = true;
+        await ctx.SaveChangesAsync();
+        return Json(new{ok=true});
+    }
+
+    private async Task<string> SaveImageAsync(IFormFile f, string folder)
+    {
+        var dir = Path.Combine(env.WebRootPath,"uploads",folder);
+        Directory.CreateDirectory(dir);
+        var name = $"{Guid.NewGuid()}{Path.GetExtension(f.FileName)}";
+        await using var s = System.IO.File.Create(Path.Combine(dir,name));
+        await f.CopyToAsync(s);
+        return $"/uploads/{folder}/{name}";
+    }
+}
+BƯỚC 3: Admin BlogController – CRUD bài viết + gắn sản phẩm
+[Area("Admin"), Authorize(Roles="Admin")]
+public class BlogController(AppDbContext ctx, IWebHostEnvironment env) : Controller {
+    public async Task<IActionResult> Index(int page=1)
+    {
+        const int ps=15;
+        var q = ctx.BlogPosts.Include(b=>b.Author).Include(b=>b.Category)
+                   .Include(b=>b.Product);
+        var total = await q.CountAsync();
+        var list  = await q.OrderByDescending(b=>b.CreatedAt)
+            .Skip((page-1)*ps).Take(ps).AsNoTracking().ToListAsync();
+        ViewBag.Page=page;
+        ViewBag.TotalPages=(int)Math.Ceiling(total/(double)ps);
+        return View(list);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Categories = await ctx.Categories.ToListAsync();
+        ViewBag.Products   = await ctx.Products.Where(p=>p.IsActive).ToListAsync();
+        return View(new BlogPostVM());
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(
+        BlogPostVM vm, IFormFile? imageFile)
+    {
+        if (!ModelState.IsValid) {
+            ViewBag.Categories = await ctx.Categories.ToListAsync();
+            ViewBag.Products   = await ctx.Products.Where(p=>p.IsActive).ToListAsync();
+            return View(vm);
+        }
+        var post = new BlogPost {
+            Title=vm.Title, Slug=SlugHelper.Generate(vm.Title),
+            Summary=vm.Summary, Content=vm.Content,
+            CategoryId=vm.CategoryId, ProductId=vm.ProductId,
+            AuthorId=User.FindFirstValue(ClaimTypes.NameIdentifier)!,
+            Status=vm.Publish?PostStatus.Published:PostStatus.Draft,
+            PublishedAt=vm.Publish?DateTime.UtcNow:null
+        };
+        if (imageFile is{Length:>0})
+            post.ImageUrl = await SaveImageAsync(imageFile);
+        ctx.BlogPosts.Add(post);
+        await ctx.SaveChangesAsync();
+        TempData["Ok"]="Tạo bài viết thành công!";
+        return RedirectToAction(nameof(Index));
+    }
+
+    // Edit, Delete tương tự ProductController
+    private async Task<string> SaveImageAsync(IFormFile f)
+    {
+        var dir=Path.Combine(env.WebRootPath,"uploads","blogs");
+        Directory.CreateDirectory(dir);
+        var name=$"{Guid.NewGuid()}{Path.GetExtension(f.FileName)}";
+        await using var s=System.IO.File.Create(Path.Combine(dir,name));
+        await f.CopyToAsync(s);
+        return $"/uploads/blogs/{name}";
+    }
+}
+BƯỚC 4: Admin OrderController – Xem & Cập nhật trạng thái
+[Area("Admin"), Authorize(Roles="Admin")]
+public class OrderController(AppDbContext ctx) : Controller {
+    public async Task<IActionResult> Index(OrderStatus? status, int page=1)
+    {
+        const int ps=20;
+        var q=ctx.Orders.Include(o=>o.User).AsQueryable();
+        if (status.HasValue) q=q.Where(o=>o.Status==status);
+        var total=await q.CountAsync();
+        var list=await q.OrderByDescending(o=>o.CreatedAt)
+            .Skip((page-1)*ps).Take(ps).AsNoTracking().ToListAsync();
+        ViewBag.Page=page; ViewBag.TotalPages=(int)Math.Ceiling(total/(double)ps);
+        ViewBag.Status=status;
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var order=await ctx.Orders.Include(o=>o.User)
+            .Include(o=>o.Items).ThenInclude(i=>i.Product)
+            .FirstOrDefaultAsync(o=>o.Id==id);
+        return order is null ? NotFound() : View(order);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> UpdateStatus(int id, OrderStatus status)
+    {
+        var order=await ctx.Orders.FindAsync(id);
+        if (order is null) return Json(new{ok=false});
+        order.Status=status;
+        await ctx.SaveChangesAsync();
+        return Json(new{ok=true,status=status.ToString()});
+    }
+}
+--------------------------------------------------------------------------------
+PHẦN 8 – HELPERS, PAGINATION & RUBRIC (SlugHelper, Pagination partial, bảng chấm điểm)
+BƯỚC 1: SlugHelper – Tạo URL thân thiện
+// Helpers/SlugHelper.cs
+public static class SlugHelper {
+    public static string Generate(string text)
+    {
+        text = text.ToLowerInvariant().Trim();
+        // Thay ký tự tiếng Việt
+        var map = new Dictionary<string,string> {
+            {"à|á|ả|ã|ạ|ă|ắ|ặ|ẳ|ẵ|ằ|â|ấ|ầ|ẩ|ẫ|ậ","a"},
+            {"è|é|ẻ|ẽ|ẹ|ê|ế|ề|ể|ễ|ệ","e"},
+            {"ì|í|ỉ|ĩ|ị","i"},
+            {"ò|ó|ỏ|õ|ọ|ô|ố|ồ|ổ|ỗ|ộ|ơ|ớ|ờ|ở|ỡ|ợ","o"},
+            {"ù|ú|ủ|ũ|ụ|ư|ứ|ừ|ử|ữ|ự","u"},
+            {"ỳ|ý|ỷ|ỹ|ỵ","y"},{"đ","d"},
+        };
+        foreach (var kv in map)
+            foreach (var ch in kv.Key.Split('|'))
+                text = text.Replace(ch, kv.Value);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"[^a-z0-9\s-]","");
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"[\s-]+","-");
+        return text.Trim('-');
+    }
+}
+BƯỚC 2: Views/Shared/_Pagination.cshtml
+@model PaginationVM
+@if (Model.TotalPages > 1)
+{
+<nav class="mt-4">
+  <ul class="pagination justify-content-center">
+    @for (int i = 1; i <= Model.TotalPages; i++)
+    {
+      <li class="page-item @(i==Model.Page?"active":"")">
+        <a class="page-link" href="?page=@i">@i</a>
+      </li>
+    }
+  </ul>
+</nav>
+}
+Bảng chấm điểm (100 điểm)
+Entity + EF Core (10 điểm): SQLite + Migration Model đủ quan hệ, config Fluent API, migration OK
+Identity (10 điểm): Register / Login / Logout / Lockout Cookie auth, phân role Admin/Customer
+Shop công khai (10 điểm): Danh sách + Chi tiết sản phẩm Paging, filter category, sort giá, count view
+Giỏ hàng bằng Session (10 điểm): Thêm/xóa/sửa AJAX không reload, hiện count
+Đặt hàng (10 điểm): Transaction + trừ tồn kho Checkout form, transaction EF Core, success page
+Blog (15 điểm): Danh sách + Chi tiết + Bình luận Filter, gắn sản phẩm, bình luận khi đăng nhập
+Admin CRUD (20 điểm): Product + Blog + Order status Upload ảnh, validate, AJAX delete, phân quyền
+IMemoryCache + Session (10 điểm): lịch sử xem Cache category menu, session viewed products
+UI/UX (5 điểm): Layout, Responsive, Navbar Bootstrap 5, navbar đúng role, pagination
+Checklist nộp bài
+README.md: hướng dẫn chạy, tài khoản test (admin@shop.vn / Admin@123)
+dotnet ef database update chạy thành công trên máy sạch
+shopapp.db trong .gitignore – KHÔNG commit file db
+Seed đủ: role, admin, 3 category, 5+ sản phẩm, 3+ blog post
+Test CRUD sản phẩm + blog, upload ảnh JPG/PNG
+Test giỏ hàng → thanh toán → xem đơn hàng admin
+Test phân quyền: user thường không vào được /Admin

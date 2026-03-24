@@ -13,9 +13,23 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Add Identity services
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
-    options.SignIn.RequireConfirmedAccount = false;
+    options.Password.RequiredLength         = 6;
+    options.Password.RequireDigit           = true;
+    options.Password.RequireUppercase       = false;
+    options.Password.RequireNonAlphanumeric = false;
+    options.User.RequireUniqueEmail         = true;
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.DefaultLockoutTimeSpan  = TimeSpan.FromMinutes(10);
 })
-.AddEntityFrameworkStores<AppDbContext>();
+.AddEntityFrameworkStores<AppDbContext>()
+.AddDefaultTokenProviders();
+
+builder.Services.ConfigureApplicationCookie(o => {
+    o.LoginPath          = "/Account/Login";
+    o.AccessDeniedPath   = "/Account/AccessDenied";
+    o.ExpireTimeSpan     = TimeSpan.FromDays(7);
+    o.SlidingExpiration  = true;
+});
 
 // Add MVC
 builder.Services.AddControllersWithViews();
@@ -49,21 +63,18 @@ app.UseSession();
 // Seed data
 using (var scope = app.Services.CreateScope())
 {
-    var services = scope.ServiceProvider;
-    var context = services.GetRequiredService<AppDbContext>();
-    await DbSeeder.SeedAsync(context);
+    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    await DbSeeder.SeedAsync(scope.ServiceProvider);
 }
 
-app.MapStaticAssets();
+app.UseStaticFiles();
 
 app.MapControllerRoute(
     name: "areas",
-    pattern: "{area:exists}/{controller=Home}/{action=Index}/{id?}")
-    .WithStaticAssets();
+    pattern: "{area:exists}/{controller=Home}/{action=Index}/{id?}");
 
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}")
-    .WithStaticAssets();
+    pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();

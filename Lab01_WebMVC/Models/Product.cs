@@ -1,4 +1,4 @@
-﻿namespace Lab01_WebMVC.Models
+namespace Lab01_WebMVC.Models
 {
     public class Product:BaseEntity
     {
@@ -13,8 +13,8 @@
         public bool IsFeatured { get; set; } = false;
         public int CategoryId { get; set; }
         public Category Category { get; set; } = null!;
-        //public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
-        //public ICollection<BlogPost> BlogPosts { get; set; } = new List<BlogPost>();
+        public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
+        public ICollection<BlogPost> BlogPosts { get; set; } = new List<BlogPost>();
 
     }
 }

@@ -1,0 +1,62 @@
+@model List<Lab01_WebMVC.Models.BlogPost>
+@{ ViewData["Title"] = "Quản lý Blog"; }
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold m-0"><i class="bi bi-chat-text"></i> Quản lý Blog</h2>
+    <a asp-action="Create" class="btn btn-primary fw-bold px-4"><i class="bi bi-plus-lg"></i> Viết Bài</a>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Tiêu đề</th>
+                        <th>Danh mục</th>
+                        <th>Tác giả</th>
+                        <th>Views</th>
+                        <th>Trạng thái</th>
+                        <th class="text-end pe-4">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach(var b in Model) {
+                        <tr>
+                            <td class="ps-4">
+                                <div class="d-flex align-items-center">
+                                    <img src="@(b.ImageUrl ?? "https://via.placeholder.com/50")" class="rounded object-fit-cover me-3 shadow-sm" style="width:50px; height:40px;" />
+                                    <div class="text-truncate" style="max-width: 250px;" title="@b.Title">
+                                        <span class="fw-bold">@b.Title</span><br/>
+                                        <small class="text-muted">@b.PublishedAt?.ToString("dd/MM/yyyy")</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td><span class="badge bg-secondary">@b.Category?.Name</span></td>
+                            <td>@b.Author?.FullName</td>
+                            <td><span class="badge bg-light text-dark"><i class="bi bi-eye"></i> @b.ViewCount</span></td>
+                            <td>
+                                @if(b.Status == Lab01_WebMVC.Models.PostStatus.Published) { 
+                                    <span class="badge bg-success">Đã xuất bản</span> 
+                                }
+                                else if(b.Status == Lab01_WebMVC.Models.PostStatus.Draft) { 
+                                    <span class="badge bg-warning text-dark">Bản nháp</span> 
+                                }
+                                else { 
+                                    <span class="badge bg-secondary">Lưu trữ</span> 
+                                }
+                            </td>
+                            <td class="text-end pe-4">
+                                <a href="/Blog/Detail?slug=@b.Slug" target="_blank" class="btn btn-sm btn-outline-info" title="Xem trước"><i class="bi bi-eye"></i></a>
+                                <a asp-action="Edit" asp-route-id="@b.Id" class="btn btn-sm btn-outline-primary" title="Sửa"><i class="bi bi-pencil"></i></a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="card-footer bg-white pt-3 border-0">
+        @await Html.PartialAsync("_Pagination", new Lab01_WebMVC.Models.ViewModels.PaginationVM { Page = ViewBag.Page, TotalPages = ViewBag.TotalPages })
+    </div>
+</div>

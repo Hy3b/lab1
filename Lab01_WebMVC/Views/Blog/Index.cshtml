@@ -1,0 +1,79 @@
+@model List<Lab01_WebMVC.Models.BlogPost>
+@{ ViewData["Title"] = "Blog Sản Phẩm"; }
+
+<h2 class="mb-4 fw-bold">📝 Tin Tức & Đánh Giá</h2>
+
+<div class="row">
+    <aside class="col-md-3 mb-4">
+        <div class="card p-3 shadow-sm border-0">
+            <h6 class="fw-bold mb-3 text-uppercase">Danh mục Bài viết</h6>
+            <div class="nav flex-column nav-pills">
+                <a href="/Blog" class="nav-link @(ViewBag.CategoryId == null ? "active" : "text-dark")">Mới nhất</a>
+                @foreach (var c in ViewBag.Categories as List<Lab01_WebMVC.Models.Category> ?? new())
+                {
+                    <a href="/Blog?categoryId=@c.Id" class="nav-link @(ViewBag.CategoryId == c.Id ? "active" : "text-dark")">@c.Name</a>
+                }
+            </div>
+            
+            <hr class="my-4">
+            
+            <h6 class="fw-bold mb-3 text-uppercase">Tìm bài viết</h6>
+            <form method="get" action="/Blog">
+                <input type="hidden" name="categoryId" value="@ViewBag.CategoryId" />
+                <div class="input-group">
+                    <input type="text" name="search" class="form-control" placeholder="Từ khóa..." value="@ViewBag.Search" />
+                    <button class="btn btn-primary"><i class="bi bi-search"></i> Tìm</button>
+                </div>
+            </form>
+        </div>
+    </aside>
+
+    <div class="col-md-9">
+        @if (!Model.Any()) {
+            <div class="alert alert-info text-center py-5 shadow-sm border-0">
+                Không tìm thấy bài viết nào!
+            </div>
+        }
+
+        <div class="row row-cols-1 row-cols-lg-2 g-4">
+            @foreach (var post in Model)
+            {
+                <div class="col">
+                    <div class="card h-100 shadow-sm border-0 transition-hover">
+                        <img src="@(post.ImageUrl ?? "https://via.placeholder.com/600x300?text=Blog+Image")" 
+                             class="card-img-top object-fit-cover" style="height:200px;" alt="@post.Title">
+                        
+                        <div class="card-body d-flex flex-column">
+                            <span class="badge bg-primary mb-2 align-self-start">@post.Category?.Name</span>
+                            <h5 class="card-title fw-bold">
+                                <a href="/Blog/Detail?slug=@post.Slug" class="text-decoration-none text-dark stretched-link">@post.Title</a>
+                            </h5>
+                            
+                            <p class="card-text text-muted flex-grow-1 small lh-base" style="display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">
+                                @post.Summary
+                            </p>
+                            
+                            <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                                <div class="text-muted small">
+                                    <i class="bi bi-person-circle"></i> @post.Author?.FullName<br>
+                                    <i class="bi bi-calendar3"></i> @post.PublishedAt?.ToString("dd/MM/yyyy")
+                                </div>
+                                <div class="text-muted small">
+                                    <i class="bi bi-eye"></i> @post.ViewCount view
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+        
+        <div class="mt-4">
+            @await Html.PartialAsync("_Pagination", new Lab01_WebMVC.Models.ViewModels.PaginationVM { Page = ViewBag.Page, TotalPages = ViewBag.TotalPages })
+        </div>
+    </div>
+</div>
+
+<style>
+    .transition-hover:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
+</style>
